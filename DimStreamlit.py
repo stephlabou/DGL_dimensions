@@ -91,7 +91,7 @@ def create_pdf_domain_graphs():
 
 # affiliations dataframe
 print('Creating dataframe for university collaborations...')
-collabs = pd.DataFrame(columns=['lat', 'long', 'collabNum', 'type'])
+collabs = pd.DataFrame(columns=['lat', 'long', 'collabNum', 'type', 'countryCode', 'country'])
 for orgs_list in pubs['research_orgs']:
     for org in orgs_list:
         if 'latitude' not in org or 'longitude' not in org: # if org doesn't have lat/long info, skip it
@@ -99,11 +99,12 @@ for orgs_list in pubs['research_orgs']:
         if org['name'] in GRID_NAMES: # if org is UCSD related, skip
             continue
         if org['name'] not in collabs.index:
-            collabs.loc[org['name']] = [org['latitude'], org['longitude'], 1, org['types'][0]]
+            collabs.loc[org['name']] = [org['latitude'], org['longitude'], 1, org['types'][0], org['country_code'], org['country_name']]
         else: # uni already in the dataframe
             collabs.at[org['name'], 'collabNum'] += 1
 
-
+collabs_country = collabs.groupby(['countryCode', 'country'], as_index=False).sum()
+collabs_country = collabs_country.drop(index = 120) # drop US so it doesn't overshadow everything else
 
 
 # STREAMLIT DASHBOARD
@@ -146,4 +147,15 @@ with open("publishers_domain_graph.pdf", "rb") as file:
 )
 
 # collab map
-st.map(data=collabs, latitude='lat', longitude='long', size='collabNum')    # map of collabs
+map = px.scatter_geo(collabs, lat='lat', lon='long', hover_name=collabs.index, size='collabNum', 
+                     color='collabNum', color_continuous_scale="sunset_r", title='Collaborations by University')
+map.update_geos(
+    visible=False, resolution=50,
+    showcountries=True
+)
+st.plotly_chart(map, use_container_width=True)
+
+map_country = px.choropleth(collabs_country, locations="country", locationmode='country names',
+                    color="collabNum",
+                    color_continuous_scale=px.colors.sequential.Plasma, title='Collaborations by Country')
+st.plotly_chart(map_country, use_container_width=True)
