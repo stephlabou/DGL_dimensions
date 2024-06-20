@@ -21,15 +21,15 @@ domains = ('None', '30 Agricultural, Veterinary and Food Sciences', '31 Biologic
            '40 Engineering', '41 Environmental Sciences', '42 Health Sciences', '43 History, Heritage and Archaeology', '44 Human Society', '46 Information and Computing Sciences',
            '47 Language, Communication and Culture', '48 Law and Legal Studies', '49 Mathematical Sciences', '50 Philosophy and Religious Studies', '51 Physical Sciences', '52 Psychology')
 
+# connect to dimcli
+dimcli.login()
+dsl = dimcli.Dsl()
 
 # this function connects do dimcli to access the API and queries the publications
 # set variable cache_var to the same thing if you want Streamlit to cache the data, change the value 
 # if you want to query the data again
 @st.cache_data
 def load_dimensions_data(cache_var):
-    # connect to dimcli
-    dimcli.login()
-    dsl = dimcli.Dsl()
     query = f"""search publications
         where research_orgs.id in {json.dumps(GRIDID_LIST)} and year=2024
         return publications[{FIELDS}] sort by year"""
@@ -46,8 +46,8 @@ pubs['overall_cat'] = pubs['category_for'].apply(lambda x : [] if isinstance(x, 
 
 # publishers dataframe
 count_publisher = pubs['publisher'].value_counts().reset_index()
-other_num = count_publisher[count_publisher['publisher'] < 10]['publisher'].sum()
-count_publisher = count_publisher[count_publisher['publisher'] >= 10] # delete publishers with <4 publications
+#other_num = count_publisher[count_publisher['count'] < 10]['publisher'].sum()
+count_publisher = count_publisher[count_publisher['count'] >= 10] # delete publishers with <4 publications
 
 # function to filter count_publisher by domain
 def createDomainDf(category):
@@ -107,14 +107,42 @@ collabs_country = collabs.groupby(['countryCode', 'country'], as_index=False).su
 collabs_country = collabs_country.drop(index = 120) # drop US so it doesn't overshadow everything else
 
 
+# function for creating topic graphs
+@st.cache_data
+def load_topic_analysis_data(domain):
+    print(domain)
+    query = f"""
+    search publications
+        where research_orgs.id = "{GRIDID_LIST[0]}"
+        and category_for.name= "{domain}"
+        and year=2024
+        return publications[id+doi+concepts_scores+year]
+    """
+    data = dsl.query_iterative(query)  
+    concepts = data.as_dataframe_concepts() # turn concepts into df with one row per concept
+    concepts_unique = concepts.drop_duplicates("concept")[['concept', 'frequency', 'score_avg']] # process duplicates
+    return concepts_unique
+
+def filter_concepts(concepts_unique, freq_min=10, freq_max=70, score_min=0.5, max_concepts=200):
+    # Score: the average relevancy score of concepts, for the dataset we extracted above. good indicator of interesting concepts
+    # max-concepts to include in the visualization is default 200
+    print('Filtering...')
+    if freq_max == 100:
+      freq_max = 100000000
+    
+    filtered_concepts = concepts_unique.query(f"""frequency >= {freq_min} & frequency <= {freq_max} & score_avg >= {score_min} """)\
+                        .sort_values(["score_avg", "frequency"], ascending=False)[:max_concepts]
+    return filtered_concepts
+
+
 # STREAMLIT DASHBOARD
 
 
 # UCSD header
 st.image(image="ucsd.png")                                                  
-bar_chart = px.bar(count_publisher, x='publisher', y='index', title='UCSD Publications by Publisher, 2024',
-                   labels={'publisher' : 'Number of publications', 'index' : 'Publishers'},
-                   category_orders={'index' : count_publisher['index']})
+bar_chart = px.bar(count_publisher, x='count', y='publisher', title='UCSD Publications by Publisher, 2024',
+                   labels={'publisher' : 'Number of publications', 'count' : 'Publishers'},
+                   category_orders={'count' : count_publisher['count']})
 
 # selectbox to pick domain for publishers bar chart
 # include: Indigenous Studies  ? no publications yet for that category
@@ -126,8 +154,8 @@ option = st.selectbox(
 
 # conditional statement to create publisher bar chart based on if a domain has been selected
 if option == None:
-    bar_chart = px.bar(count_publisher, x='publisher', y='index', title='UCSD Publications by Publisher, 2024',
-                   labels={'publisher' : 'Number of publications', 'index' : 'Publishers'})
+    bar_chart = px.bar(count_publisher, x='count', y='publisher', title='Top UCSD Publications by Publisher, 2024',
+                   labels={'count' : 'Number of publications', 'publisher' : 'Publishers'})
 else:
     bar_chart = px.bar(x=createDomainDf(option)['count'][0:10], y=createDomainDf(option).index[0:10],
                        title='Top 10 Publishers for UCSD Publications in 2024, ' + option[3:], 
@@ -159,3 +187,29 @@ map_country = px.choropleth(collabs_country, locations="country", locationmode='
                     color="collabNum",
                     color_continuous_scale=px.colors.sequential.Plasma, title='Collaborations by Country')
 st.plotly_chart(map_country, use_container_width=True)
+
+# concept map
+option_concept = st.selectbox(
+    "Choose a domain to view concepts discussed in recent publications",
+    domains,
+    index=None,
+    placeholder='Select domain...')
+
+def printConcept(min_freq=10):
+    if option_concept != None:
+        concept_df = load_topic_analysis_data(option_concept)
+        filtered_concept_df = filter_concepts(concept_df, min_freq)
+        concept_graph = px.scatter(filtered_concept_df,
+                                   x="concept",
+                                   y="frequency",
+                                   height=700,
+                                   color="score_avg",
+                                   color_continuous_scale=px.colors.sequential.Plasma,
+                                   size="score_avg")
+        st.plotly_chart(concept_graph, use_container_width=True)
+    else:
+        filtered_concept_df=None
+
+    return filtered_concept_df
+
+fil_concept_df = printConcept()
