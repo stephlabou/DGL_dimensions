@@ -13,8 +13,8 @@ import seaborn as sns
 
 
 # some variables
-GRIDID_LIST = ["grid.266100.3", "grid.420234.3", "grid.413086.8"]
-GRID_NAMES = ['University of California, San Diego', 'UC San Diego Health System', 'University of California San Diego Medical Center'] 
+GRIDID_LIST = ["grid.266100.3"] #"grid.420234.3", "grid.413086.8"
+GRID_NAMES = ['University of California, San Diego'] #'UC San Diego Health System', 'University of California San Diego Medical Center']
 FIELDS = "title+type+year+journal+authors+research_orgs+research_org_names+publisher+times_cited+funders+authors_count+category_for"
 domains = ('None', '30 Agricultural, Veterinary and Food Sciences', '31 Biological Sciences', '32 Biomedical and Clinical Sciences', '33 Built Environment and Design', 
            '34 Chemical Sciences', '35 Commerce, Management, Tourism and Services', '36 Creative Arts and Writing', '37 Earth Sciences', '38 Economics', '39 Education',
